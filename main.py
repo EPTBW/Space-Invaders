@@ -50,9 +50,16 @@ pygame.time.set_timer(MYSTERY_SHIP,random.randint(8000,10000))
 game_offset_x = (SCREEN_WIDTH - GAME_WIDTH) // 2
 game_offset_y = (SCREEN_HEIGHT - GAME_HEIGHT) // 2
 
+current_level = game.level
+
 #Loop
 while True:
-    #Checking for Events
+    # Динамическое изменение скорости стрельбы при переходе на новый уровень
+    if game.level != current_level:
+        current_level = game.level
+        pygame.time.set_timer(SHOOT_LASER, game.laser_delay)
+
+    # Checking for Events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
@@ -65,16 +72,29 @@ while True:
         keys = pygame.key.get_pressed()
         if keys[pygame.K_SPACE] and not game.run:
             game.reset()
+            current_level = game.level
+            pygame.time.set_timer(SHOOT_LASER, game.laser_delay)
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_n:
+                game.aliens_group.empty()
+                if game.boss_group.sprite:
+                    game.boss_group.sprite.kill()
 
-    #Updating
+    # Updating
     if game.run:
         game.spaceship_group.update()
         game.move_aliens()
         game.alien_lasers_group.update()
         game.mystery_ship_group.update()
-        game.check_collisions()
 
-    #Drawing
+        # Обновляем новые группы
+        game.boss_group.update()
+        game.powerup_group.update()
+
+        game.check_collisions()
+        game.check_level_completion()  # Проверяем, пройден ли уровень
+
+    # Drawing
     screen.fill(GREY)
     game_surface.fill(GREY)
 
@@ -86,12 +106,21 @@ while True:
     game.alien_lasers_group.draw(game_surface)
     game.mystery_ship_group.draw(game_surface)
 
-    #Итерфейс
+    # Отрисовка босса и бонусов
+    game.powerup_group.draw(game_surface)
+    game.boss_group.draw(game_surface)
+    if game.boss_group.sprite:
+        game.boss_group.sprite.draw_health(game_surface)
+
+    # Итерфейс
     if game.run:
         screen.blit(game_surface, (game_offset_x, game_offset_y))
-        screen.blit(level_surface, (720, 720,50,50))
+
+        # Динамический текст уровня
+        level_surface = font.render(f"Level {game.level}", False, YELLOW)
+        screen.blit(level_surface, (720, 720, 50, 50))
     else:
-        screen.blit(game_over_surface, (720,720,50,50))
+        screen.blit(game_over_surface, (720, 720, 50, 50))
 
     #Жизни корабля
     x = 50

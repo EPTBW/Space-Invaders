@@ -7,6 +7,7 @@ from obstacle import Obstacle
 from obstacle import grid
 from alien import Alien
 from alien import MysteryShip
+from alien import Alien, MysteryShip, Boss, PowerUp
 
 
 class Game:
@@ -20,6 +21,15 @@ class Game:
         self.spaceship_group = pygame.sprite.GroupSingle()
         self.spaceship_group.add(Spaceship(screen_width, screen_height, self.offset_y))
         self.obstacles = self.create_obstacles(offset_y)
+
+
+        self.level = 1
+        self.alien_speed = 1
+        self.laser_delay = 1000
+
+        self.boss_group = pygame.sprite.GroupSingle()
+        self.powerup_group = pygame.sprite.Group()
+
         self.aliens_group = pygame.sprite.Group()
         self.create_aliens()
         self.aliens_direction = 1
@@ -54,9 +64,18 @@ class Game:
         """
         создаем сетку врагов
         """
-        for row in range(5):
-            for col in range(11):
-                x = 100 + col * 55
+        rows = 5
+        cols = 11
+
+        # Стадия 4: Плотные волны
+        if self.level == 4:
+            rows = 6
+            cols = 12
+
+        for row in range(rows):
+            for col in range(cols):
+                offset_x = 100 if cols == 11 else 60
+                x = offset_x + col * 55
                 y = 30 + row * 55
 
                 if row == 0:
@@ -66,7 +85,7 @@ class Game:
                 else:
                     alien_type = 1
 
-                alien = Alien(alien_type, x ,y)
+                alien = Alien(alien_type, x, y)
                 self.aliens_group.add(alien)
 
     def move_aliens(self):
@@ -74,7 +93,7 @@ class Game:
         функция реализующая движение врагов, как только они достигают
         края экрана они спускаются
         """
-        self.aliens_group.update(self.aliens_direction)
+        self.aliens_group.update(self.aliens_direction * self.alien_speed)
 
         alien_sprites = self.aliens_group.sprites()
         for alien in alien_sprites:
@@ -102,6 +121,13 @@ class Game:
             random_alien = random.choice(self.aliens_group.sprites())
             laser_sprite = Laser(random_alien.rect.center, -6, self.screen_height)
             self.alien_lasers_group.add(laser_sprite)
+            # Если стадия 5 и есть босс - босс стреляет сразу 3 лазерами (Особая атака)
+        elif self.boss_group.sprite:
+            boss = self.boss_group.sprite
+            l1 = Laser((boss.rect.centerx, boss.rect.bottom), -8, self.screen_height)
+            l2 = Laser((boss.rect.left + 20, boss.rect.bottom), -6, self.screen_height)
+            l3 = Laser((boss.rect.right - 20, boss.rect.bottom), -6, self.screen_height)
+            self.alien_lasers_group.add(l1, l2, l3)
 
     def create_mystery_ship(self):
         """
@@ -110,54 +136,72 @@ class Game:
         self.mystery_ship_group.add(MysteryShip(self.screen_width))
 
     def check_collisions(self):
-        """
-        если спрайт лазера пересекается со спрайтом инопланетянина
-        спрайты пересекаются, оба спрайта удалаяются через kill()
-        """
-        #spaceship laser
+        # -- Обновленная логика попаданий --
         if self.spaceship_group.sprite.laser_group:
-            #aliens
             for laser_sprite in self.spaceship_group.sprite.laser_group:
 
+                # Инопланетяне
                 aliens_hit = pygame.sprite.spritecollide(laser_sprite, self.aliens_group, True)
                 if aliens_hit:
                     for alien in aliens_hit:
-                        self.score += alien.type * 100
+                        self.score += alien.type * 100 * self.level  # Множитель очков от уровня
                         self.update_high_score()
+
+                        # На 3+ уровне есть 10% шанс выпадения бонуса
+                        if self.level >= 3 and random.randint(1, 10) == 1:
+                            self.powerup_group.add(PowerUp(alien.rect.centerx, alien.rect.centery))
+
                         laser_sprite.kill()
                         self.explosion_sound.play()
-                #mystery ship
+
+                # Попадания по Боссу
+                if self.boss_group.sprite:
+                    if pygame.sprite.spritecollide(laser_sprite, self.boss_group, False):
+                        laser_sprite.kill()
+                        self.boss_group.sprite.health -= 1
+                        self.explosion_sound.play()
+                        if self.boss_group.sprite.health <= 0:
+                            self.score += 5000  # Очки за босса
+                            self.update_high_score()
+                            self.boss_group.sprite.kill()
+
+                # Мистический корабль
                 if pygame.sprite.spritecollide(laser_sprite, self.mystery_ship_group, True):
                     self.score += 500
                     self.update_high_score()
                     laser_sprite.kill()
                     self.explosion_sound.play()
-                #barricade
+
+                # Укрытия
                 for obstacle in self.obstacles:
                     if pygame.sprite.spritecollide(laser_sprite, obstacle.blocks_group, True):
                         laser_sprite.kill()
 
-        #alien lasers
+        # Лазеры врагов
         if self.alien_lasers_group:
-            #spaceship
             for laser_sprite in self.alien_lasers_group:
                 if pygame.sprite.spritecollide(laser_sprite, self.spaceship_group, False):
                     laser_sprite.kill()
                     self.lives -= 1
                     self.check_for_lives()
                     print("spaceship hit")
-            #barricade
             for obstacle in self.obstacles:
                 pygame.sprite.groupcollide(self.alien_lasers_group, obstacle.blocks_group, True, True)
 
-        #aliens sprite
+        # Подбор бонусов игроком
+        if self.powerup_group:
+            for powerup in self.powerup_group:
+                if pygame.sprite.spritecollide(powerup, self.spaceship_group, False):
+                    powerup.kill()
+                    self.lives = min(self.lives + 1, 5)  # Даем жизнь, но не больше 5
+                    self.score += 200
+
+        # Столкновение врагов с укрытиями/игроком
         if self.aliens_group:
             for alien in self.aliens_group:
-                #barricade
                 for obstacle in self.obstacles:
                     pygame.sprite.spritecollide(alien, obstacle.blocks_group, True)
-                #spaceship
-                if  pygame.sprite.spritecollide(alien, self.spaceship_group, False):
+                if pygame.sprite.spritecollide(alien, self.spaceship_group, False):
                     self.game_over()
 
     def check_for_lives(self):
@@ -166,6 +210,45 @@ class Game:
         """
         if self.lives == 0:
             self.game_over()
+
+    def check_level_completion(self):
+        """
+        Проверка: если все враги убиты, переходим на следующую стадию
+        """
+        if not self.aliens_group and not self.boss_group.sprite and self.run:
+            self.level += 1
+            self.next_level()
+
+    def next_level(self):
+        """
+        Настройка параметров для каждой из 5 стадий
+        """
+        self.spaceship_group.sprite.laser_group.empty()
+        self.alien_lasers_group.empty()
+        self.powerup_group.empty()
+        self.obstacles = self.create_obstacles(self.offset_y)  # Восстанавливаем укрытия
+
+        if self.level == 2:
+            self.alien_speed = 2
+            self.laser_delay = 700
+            self.create_aliens()
+        elif self.level == 3:
+            self.alien_speed = 2
+            self.laser_delay = 500
+            self.create_aliens()
+        elif self.level == 4:
+            self.alien_speed = 3
+            self.laser_delay = 400
+            self.create_aliens()
+        elif self.level == 5:
+            self.alien_speed = 4
+            self.laser_delay = 800
+            # Спавн босса
+            self.boss_group.add(Boss(self.screen_width))
+        elif self.level > 5:
+            # Бесконечный цикл
+            self.level = 1
+            self.next_level()
 
     def game_over(self):
         """
@@ -202,11 +285,16 @@ class Game:
         self.run = True
         self.lives = 3
         self.score = 0
+        self.level = 1
+        self.alien_speed = 1
+        self.laser_delay = 1000
 
         self.spaceship_group.sprite.reset()
         self.aliens_group.empty()
         self.alien_lasers_group.empty()
         self.mystery_ship_group.empty()
+        self.powerup_group.empty()
+        self.boss_group.empty()
 
         self.create_aliens()
         self.obstacles = self.create_obstacles(self.offset_y)
