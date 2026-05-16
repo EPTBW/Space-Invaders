@@ -74,6 +74,11 @@ while True:
             game.reset()
             current_level = game.level
             pygame.time.set_timer(SHOOT_LASER, game.laser_delay)
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_n:
+                game.aliens_group.empty()
+                if game.boss_group.sprite:
+                    game.boss_group.sprite.kill()
 
     # Updating
     if game.run:

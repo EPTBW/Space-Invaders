@@ -22,9 +22,13 @@ class Game:
         self.spaceship_group.add(Spaceship(screen_width, screen_height, self.offset_y))
         self.obstacles = self.create_obstacles(offset_y)
 
+
         self.level = 1
         self.alien_speed = 1
         self.laser_delay = 1000
+
+        self.boss_group = pygame.sprite.GroupSingle()
+        self.powerup_group = pygame.sprite.Group()
 
         self.aliens_group = pygame.sprite.Group()
         self.create_aliens()
@@ -242,7 +246,7 @@ class Game:
             # Спавн босса
             self.boss_group.add(Boss(self.screen_width))
         elif self.level > 5:
-            # Бесконечный цикл после 5 уровня или победа
+            # Бесконечный цикл
             self.level = 1
             self.next_level()
 
